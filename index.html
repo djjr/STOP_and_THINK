@@ -1,0 +1,498 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Stop + Think 1.1.7</title>
+  <style>
+        body {
+        font-family: sans-serif;
+        padding: 1em;
+        /*background: #ffffff;*/
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        }
+        body.slides-mode {
+        font-size: 1.4em;
+        }
+
+        body.slides-mode textarea,
+        body.slides-mode .answer-box,
+        body.slides-mode #answer-box summary span {
+        font-size: 1.2em;
+        }
+
+
+        .question-box, textarea, .answer-box {
+        width: 90vw;
+        max-width: 600px;
+        }
+
+        textarea {
+        margin-top: 1em;
+        height: 50px;
+        font-size: 1em;
+        }
+
+        .answer {
+        color: green;
+        font-size: 0.9em;
+        }
+
+    /*    .navigation {
+        margin-top: 1.5em;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5em;
+        }*/
+
+    .navigation {
+        margin-top: 0.25em;
+        margin-bottom: 0.75em;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5em;
+        justify-content: center;
+        }
+
+    /* Stack on narrow screens */
+    @media (max-width: 480px) {
+        .navigation {
+            flex-direction: column;
+            align-items: center;
+        }
+        }
+
+
+        button {
+        padding: 0.3em 0.75em;
+        font-size: 0.85em;
+        border: 1px solid #bbb;
+        background: #f8f8f8;
+        color: #444;
+        border-radius: 4px;
+        cursor: pointer;
+        }
+
+        @media (min-width: 768px) {
+        .navigation {
+            flex-direction: row;
+            flex-wrap: wrap;
+        }
+        }
+
+        .question-box {
+        font-size: 1rem;
+        }
+
+        .slides-mode .question-box {
+        font-size: 1.5rem;
+        }
+
+        .answer-box {
+        border: thin solid #F1F3F4;
+        width: 90vw;
+        /*max-width: 75ch;*/
+        max-width: 600px;
+        /*background: white;*/
+        }
+        .answer-box button {
+        padding: 0.4em 0.8em;
+        font-size: 0.9em;
+        cursor: pointer;
+        }
+        #version-tag {
+        position: fixed;
+        top: 5px;
+        right: 10px;
+        font-size: 0.75em;
+        color: #999;
+        background: #f1f1f1;
+        padding: 2px 6px;
+        border-radius: 4px;
+        z-index: 1000;
+        pointer-events: none; /* so it doesn't block clicks */
+        }
+      img {
+        display: block;
+        margin-left: auto;
+        margin-right: auto;
+        max-width: 100%;
+        height: auto;
+      }
+
+  </style>
+  <script src="stdata.js"></script>
+</head>
+<body>
+  <div id="version-tag">v1.1.7</div>
+  <div class="navigation" id="nav"></div>
+  <div class="question-box" id="question-box"></div>
+  <textarea id="response-box" placeholder="Type your response here..."></textarea>
+
+  <details id="answer-box" class="answer-box">
+    <summary style="cursor: pointer; color: #565858; /*background-color: #ffffff;*/ margin-bottom: 10px;">
+      <span style="font-size: 10pt;">Compare your response</span>
+    </summary>
+    <div class="answer-box">
+      <p class="answer" id="answer-text"><span></span></p>
+    </div>
+  </details>
+  <div id="debug" style="color: #40aa40; font-size: 0.9em; margin-top: 0.5em;"></div>
+
+
+
+  <script>
+    function getQueryParam(name) {
+      const urlParams = new URLSearchParams(window.location.search);
+      return urlParams.get(name);
+    }
+
+    function getQuestionSequence() {
+      const qList = getQueryParam("q");
+      return qList ? qList.split(",").map(n => parseInt(n.trim(), 10)) : [];
+    }
+
+    function getCurrentIndex() {
+      const index = getQueryParam("i");
+      return index ? parseInt(index, 10) : 0;
+    }
+    function getDebug() {
+      return getQueryParam("debug") === 'yes';
+    }
+
+    function isPreReadMode() {
+      return getQueryParam("preRead") === 'true';
+    }
+
+    function isSlidesMode() {
+        const sv = getQueryParam("slides");
+        return !!sv && sv !== 'false';
+    }
+
+    function getDeckName() {
+        const sv = getQueryParam("slides");
+        if (!sv || sv === 'false') return null;
+        return (sv === 'true') ? 'unknown' : sv;
+    }
+
+    function formatTimestamp(isoStr) {
+        if (!isoStr) return null;
+        return new Date(isoStr).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+    }
+
+
+    function renderQuestion() {
+      const sequence = getQuestionSequence();
+      const currentIndex = getCurrentIndex();
+      const debug = getDebug();
+      if (debug) document.getElementById("debug").innerText = sequence;
+
+      const qNum = sequence[currentIndex];
+    //   if (isSlidesMode()) {
+    //     document.body.style.fontSize = "1.4em"; // or whatever scale you want
+    //     document.getElementById("question-box").style.fontSize = "1.2em";
+    //     document.getElementById("response-box").style.fontSize = "1.2em";
+    //     document.querySelector("#answer-box summary span").style.fontSize = "1.2em";
+    //   }
+    if (isSlidesMode()) {
+    document.body.classList.add("slides-mode");
+    }
+
+
+      //const entry = data.find(q => q.number === qNum);
+      const entry = window.stopThinkQuestions.find(q => q.number === qNum);
+
+      const questionBox = document.getElementById("question-box");
+      const answerBox = document.getElementById("answer-box");
+      const answerText = document.getElementById("answer-text");
+      const responseBox = document.getElementById("response-box");
+
+      if (!entry) {
+        questionBox.innerHTML = `<strong>Question not found. Check your q list.</strong>`;
+        answerBox.style.display = "none";
+        return;
+      }
+
+      const key = `stopthink_q_${entry.number}`;
+      const saved = localStorage.getItem(key) || "";
+
+
+
+
+      // questionBox.innerHTML = `
+      //   <strong><span style="font-size: 12pt;">
+      //     <strong><span style="color: #ba372a;">STOP</span>
+      //       <span style="color: #565858ff;">+</span>
+      //       <span style="color: #377437ff;">THINK</span>: </strong>
+      //     ${entry.question} (${entry.number})
+      //   </span></strong>`;
+
+      // answerText.innerText = entry.answer;
+
+      const preRead = isPreReadMode();
+
+      const promptLabel = preRead ? "PONDER THIS" : "STOP + THINK";
+      const promptHTML = preRead
+        ? `<strong><span style="color: #377437;">PONDER THIS</span>: </strong>`
+        : `<strong><span style="color: #ba372a;">STOP</span>
+            <span style="color: #565858ff;">+</span>
+            <span style="color: #377437ff;">THINK</span>: </strong>`;
+
+      questionBox.innerHTML = `
+        <strong><span class="question-text">
+          ${promptHTML} ${entry.question} (${entry.number})
+        </span></strong>`;
+
+      answerText.innerHTML = preRead ? "Read the reading!" : entry.answer;
+
+
+      responseBox.value = saved;
+
+      responseBox.addEventListener("input", () => {
+        localStorage.setItem(key, responseBox.value);
+        localStorage.setItem(key + '_time', new Date().toISOString());
+        if (responseBox.value.trim().length >= 14) {
+          document.getElementById("debug").innerText = "";
+        }
+      });
+
+      renderNav(sequence, currentIndex);
+    }
+
+    function renderNav(sequence, index) {
+      const nav = document.getElementById("nav");
+      nav.innerHTML = "";
+
+        const nextIndex = (index + 1) % sequence.length;
+        const nextNum = sequence[nextIndex];
+
+        const nextBtn = document.createElement("button");
+        nextBtn.textContent = "\u2192" + `Q${nextIndex + 1}/${sequence.length}`;
+        //nextBtn.textContent = `Go to Question ${nextNum}`;
+        nextBtn.onclick = () => {
+        const base = window.location.pathname;
+        const params = new URLSearchParams();
+
+        // params.set("q", sequence.join(","));
+        // params.set("i", nextIndex);
+        // window.location.href = `${base}?${params.toString()}`;
+        
+        params.set("q", sequence.join(","));
+        params.set("i", nextIndex);
+
+        const preRead = getQueryParam("preRead");
+        if (preRead) params.set("preRead", preRead);
+
+        const debug = getQueryParam("debug");
+        if (debug) params.set("debug", debug);
+
+        const slides = getQueryParam("slides");
+        if (slides) params.set("slides", slides);
+
+        window.location.href = `${base}?${params.toString()}`;
+
+
+
+        };
+        nav.appendChild(nextBtn);
+
+      //const downloadBtn = document.createElement("button");
+      //downloadBtn.textContent = "Download All My Answers";
+      //downloadBtn.onclick = downloadAnswers;
+      //nav.appendChild(downloadBtn);
+
+      const showBtn = document.createElement("button");
+      showBtn.textContent = "Export Answers";
+      showBtn.onclick = showAnswersInline;
+      nav.appendChild(showBtn);
+
+    }
+
+    function downloadAnswers() {
+        const sequence = getQuestionSequence();
+        let output = "";
+
+        sequence.forEach(num => {
+            const card = window.stopThinkQuestions.find(q => q.number === num);
+            if (card) {
+            const key = `stopthink_q_${card.number}`;
+            const answer = localStorage.getItem(key) || "";
+            output += `Question ${card.number}: ${card.question}\n\nME: ${answer}\n\n`;
+            }
+        });
+
+        const blob = new Blob([output], { type: "text/plain" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = "stop-think-answers.txt";
+        a.click();
+    }
+
+    function fallbackCopyText(text) {
+        const temp = document.createElement("textarea");
+        temp.value = text;
+        temp.setAttribute("readonly", "");
+        temp.style.position = "absolute";
+        temp.style.left = "-9999px";
+        document.body.appendChild(temp);
+        temp.select();
+        const success = document.execCommand("copy");
+        document.body.removeChild(temp);
+        return success;
+    }
+
+
+    function generateMarkdown() {
+        const sequence = getQuestionSequence();
+        const deck = getDeckName();
+        let md = "";
+        if (deck) md += `**Deck:** ${deck}\n\n`;
+        sequence.forEach(num => {
+            const card = window.stopThinkQuestions.find(q => q.number === num);
+            if (card) {
+                const key = `stopthink_q_${card.number}`;
+                const answer = localStorage.getItem(key) || "";
+                const ts = formatTimestamp(localStorage.getItem(key + '_time'));
+                const tmp = document.createElement("div");
+                tmp.innerHTML = card.question;
+                const plainQ = (tmp.textContent || "").trim();
+                md += `## Q${card.number}: ${plainQ}\n`;
+                if (ts) md += `*Last answered: ${ts}*\n`;
+                md += `\n${answer}\n\n---\n\n`;
+            }
+        });
+        return md;
+    }
+
+    function showAnswersInline() {
+        const sequence = getQuestionSequence();
+        const deck = getDeckName();
+        let output = "";
+        if (deck) output += `Deck: ${deck}\n\n`;
+
+        sequence.forEach(num => {
+            const card = window.stopThinkQuestions.find(q => q.number === num);
+            if (card) {
+                const key = `stopthink_q_${card.number}`;
+                const answer = localStorage.getItem(key) || "";
+                const ts = formatTimestamp(localStorage.getItem(key + '_time'));
+                const tmp = document.createElement("div");
+                tmp.innerHTML = card.question;
+                const plainQ = (tmp.textContent || "").trim();
+                output += `Question ${card.number}: ${plainQ}`;
+                if (ts) output += `\n[Last answered: ${ts}]`;
+                output += `\n\n${answer}\n\n\n`;
+            }
+        });
+
+        let outputDiv = document.getElementById("inline-answers");
+        if (!outputDiv) {
+            outputDiv = document.createElement("div");
+            outputDiv.id = "inline-answers";
+            outputDiv.style.marginTop = "2em";
+            outputDiv.innerHTML = `<h3>Your Answers So Far:</h3>`;
+
+            // Create styled container
+            const answerBox = document.createElement("div");
+            answerBox.className = "answer-box";
+            answerBox.style.marginBottom = "10px";
+            answerBox.style.padding = "5px 15px";
+
+            // Pre block
+            const pre = document.createElement("pre");
+            pre.id = "answers-text";
+            pre.style.whiteSpace = "pre-wrap";
+            pre.className = "answer";
+
+            // Button container
+            const btnContainer = document.createElement("div");
+            btnContainer.style.marginTop = "0.5em";
+            btnContainer.style.display = "flex";
+            btnContainer.style.gap = "10px";
+
+            // Select All button
+            const selectBtn = document.createElement("button");
+            selectBtn.textContent = "Select All";
+            selectBtn.onclick = () => {
+                const range = document.createRange();
+                range.selectNodeContents(pre);
+                const sel = window.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(range);
+            };
+
+            // Copy button
+            const copyBtn = document.createElement("button");
+            copyBtn.textContent = "Copy to Clipboard";
+            /*copyBtn.onclick = async () => {
+                try {
+                    await navigator.clipboard.writeText(pre.textContent);
+                    copyBtn.textContent = "Copied!";
+                    setTimeout(() => copyBtn.textContent = "Copy to Clipboard", 1500);
+                } catch (err) {
+                    alert("Failed to copy: " + err);
+                }
+            };*/
+
+            copyBtn.onclick = () => {
+            const text = pre.textContent;
+
+            navigator.clipboard.writeText(text)
+                .then(() => {
+                copyBtn.textContent = "Copied!";
+                })
+                .catch(err => {
+                const success = fallbackCopyText(text);
+                copyBtn.textContent = success ? "Copied (fallback)" : "Copy failed";
+                });
+
+            setTimeout(() => copyBtn.textContent = "Copy to Clipboard", 1500);
+            };
+
+            // Copy as Markdown button
+            const mdBtn = document.createElement("button");
+            mdBtn.textContent = "Copy as Markdown";
+            mdBtn.onclick = () => {
+                const md = generateMarkdown();
+                navigator.clipboard.writeText(md)
+                    .then(() => { mdBtn.textContent = "Copied!"; })
+                    .catch(() => {
+                        const success = fallbackCopyText(md);
+                        mdBtn.textContent = success ? "Copied!" : "Copy failed";
+                    });
+                setTimeout(() => mdBtn.textContent = "Copy as Markdown", 1500);
+            };
+
+                // Append everything
+                btnContainer.appendChild(selectBtn);
+                btnContainer.appendChild(copyBtn);
+                btnContainer.appendChild(mdBtn);
+                answerBox.appendChild(pre);
+                answerBox.appendChild(btnContainer);
+                outputDiv.appendChild(answerBox);
+                document.body.appendChild(outputDiv);
+        }
+
+
+
+        document.getElementById("answers-text").textContent = output;
+        }
+
+    document.querySelector("#answer-box summary").addEventListener("click", (event) => {
+        if (isSlidesMode()) return; // Bypass restriction
+console.log('Got past slides mode restriction');
+        const response = document.getElementById("response-box").value;
+        if (response.trim().length < 14) {
+            event.preventDefault();
+            document.getElementById("debug").innerText = "At least type \"I have no idea\" if you want to view a suggested response.\".";
+        }
+    });
+
+
+    window.addEventListener("load", renderQuestion);
+  </script>
+
+</body>
+</html>

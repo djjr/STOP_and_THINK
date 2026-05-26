@@ -1,0 +1,961 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stop+Think Editor</title>
+  <script src="stdata.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #f0f2f5;
+      min-height: 100vh;
+    }
+
+    /* ── HEADER ─────────────────────────────────────── */
+    header {
+      background: #2c3e50;
+      color: white;
+      padding: 0.7rem 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    header h1 { font-size: 1rem; font-weight: 700; flex: 1; letter-spacing: 0.02em; }
+    #save-status { font-size: 0.78rem; color: rgba(255,255,255,0.65); white-space: nowrap; }
+    .hbtn {
+      background: rgba(255,255,255,0.12);
+      color: white;
+      border: 1px solid rgba(255,255,255,0.25);
+      padding: 0.35rem 0.85rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.82rem;
+      transition: background 0.13s;
+      white-space: nowrap;
+    }
+    .hbtn:hover { background: rgba(255,255,255,0.22); }
+    .hbtn.green { background: #27ae60; border-color: #27ae60; }
+    .hbtn.green:hover { background: #2ecc71; border-color: #2ecc71; }
+    .hbtn.deploy { background: #8e44ad; border-color: #8e44ad; }
+    .hbtn.deploy:hover { background: #9b59b6; border-color: #9b59b6; }
+    .hbtn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    /* ── LAYOUT ─────────────────────────────────────── */
+    .layout {
+      max-width: 1020px;
+      margin: 0 auto;
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    /* ── PANEL ──────────────────────────────────────── */
+    .panel {
+      background: white;
+      border-radius: 10px;
+      padding: 1rem 1.2rem;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+    }
+    .panel-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-bottom: 0.75rem;
+    }
+    .panel-title {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: #888;
+      margin-bottom: 0.75rem;
+    }
+    .panel-row .panel-title { margin-bottom: 0; }
+
+    /* ── TAG PILLS (filter) ─────────────────────────── */
+    .pill-wrap { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+    .pill {
+      display: inline-block;
+      padding: 0.22rem 0.65rem;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      cursor: pointer;
+      border: 1.5px solid #ddd;
+      background: #f8f8f8;
+      color: #444;
+      transition: all 0.1s;
+      user-select: none;
+      line-height: 1.4;
+    }
+    .pill:hover { border-color: #aaa; background: #efefef; }
+    .pill.active { background: #2c3e50; border-color: #2c3e50; color: white; }
+    .clear-btn {
+      background: none; border: 1px solid #ddd; border-radius: 6px;
+      padding: 0.2rem 0.6rem; font-size: 0.75rem; cursor: pointer;
+      color: #888; transition: all 0.1s;
+    }
+    .clear-btn:hover { background: #f0f0f0; color: #333; }
+    .filter-meta { font-size: 0.8rem; color: #999; margin-top: 0.55rem; }
+    .filter-meta strong { color: #333; }
+
+    /* ── QUESTION LIST ──────────────────────────────── */
+    .q-list { display: flex; flex-direction: column; gap: 0.35rem; }
+    .q-item {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      padding: 0.6rem 0.7rem;
+      border: 1.5px solid #e8e8e8;
+      border-radius: 8px;
+      cursor: grab;
+      background: white;
+      transition: border-color 0.1s, box-shadow 0.1s;
+    }
+    .q-item:hover { border-color: #ccc; box-shadow: 0 2px 6px rgba(0,0,0,0.05); }
+    .q-item.dragging { opacity: 0.35; cursor: grabbing; }
+    .q-item.drag-over { border-color: #3498db; background: #f0f7ff; }
+    .drag-handle { color: #ccc; font-size: 1rem; flex-shrink: 0; }
+    .q-num { font-size: 0.72rem; font-weight: 700; color: #aaa; min-width: 30px; flex-shrink: 0; }
+    .q-text {
+      flex: 1;
+      font-size: 0.85rem;
+      color: #222;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+    }
+    .q-taglist { display: flex; flex-wrap: wrap; gap: 0.22rem; max-width: 180px; flex-shrink: 0; }
+    .qtag {
+      font-size: 0.68rem;
+      padding: 0.12rem 0.4rem;
+      border-radius: 999px;
+      background: #e8f4fd;
+      color: #2980b9;
+      white-space: nowrap;
+    }
+    .qtag.overflow { background: #eee; color: #888; }
+    /* Children that aren't interactive get pointer-events:none so drag events
+       land directly on the .q-item parent rather than on child elements */
+    .drag-handle, .q-num, .q-text, .q-taglist, .q-taglist * { pointer-events: none; }
+    /* Checkbox must stay interactive */
+    .q-include-cb { pointer-events: auto; cursor: pointer; flex-shrink: 0; accent-color: #27ae60; width: 15px; height: 15px; }
+    .edit-btn {
+      background: none; border: 1.5px solid #ddd; border-radius: 6px;
+      padding: 0.28rem 0.6rem; font-size: 0.75rem; cursor: pointer;
+      color: #555; flex-shrink: 0; transition: all 0.1s;
+    }
+    .edit-btn:hover { background: #2c3e50; color: white; border-color: #2c3e50; }
+    .empty-state { text-align: center; padding: 2rem; color: #bbb; font-size: 0.88rem; }
+    .new-q-btn {
+      background: #27ae60; color: white; border: none; border-radius: 7px;
+      padding: 0.35rem 0.85rem; font-size: 0.8rem; cursor: pointer;
+      transition: background 0.12s;
+    }
+    .new-q-btn:hover { background: #2ecc71; }
+
+    /* ── URL BAR ────────────────────────────────────── */
+    .url-box {
+      font-family: monospace;
+      font-size: 0.8rem;
+      background: #f6f6f6;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      padding: 0.6rem 0.8rem;
+      word-break: break-all;
+      color: #333;
+      min-height: 2.4rem;
+      cursor: pointer;
+      transition: background 0.1s;
+    }
+    .url-box:hover { background: #eef; }
+    .url-hint { font-size: 0.72rem; color: #bbb; margin-top: 0.3rem; }
+    .url-controls { display: flex; align-items: center; gap: 1rem; margin-top: 0.75rem; }
+    .url-controls label { display: flex; align-items: center; gap: 0.4rem; font-size: 0.84rem; cursor: pointer; }
+    .copy-btn {
+      margin-left: auto; background: #2c3e50; color: white; border: none;
+      border-radius: 7px; padding: 0.42rem 1rem; cursor: pointer;
+      font-size: 0.84rem; transition: background 0.12s;
+    }
+    .copy-btn:hover { background: #34495e; }
+
+    /* ── MODAL ──────────────────────────────────────── */
+    .overlay {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.45);
+      z-index: 1000;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 2rem 1rem;
+      overflow-y: auto;
+    }
+    .overlay.open { display: flex; }
+    .modal {
+      background: white; border-radius: 12px; width: 100%;
+      max-width: 700px; box-shadow: 0 20px 60px rgba(0,0,0,0.25);
+      flex-shrink: 0;
+    }
+    .modal-head {
+      padding: 0.9rem 1.2rem; border-bottom: 1px solid #eee;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .modal-head h2 { font-size: 0.95rem; font-weight: 600; }
+    .x-btn { background: none; border: none; font-size: 1.3rem; cursor: pointer; color: #888; line-height: 1; }
+    .modal-body { padding: 1.2rem; display: flex; flex-direction: column; gap: 1.1rem; }
+    .modal-foot {
+      padding: 0.9rem 1.2rem; border-top: 1px solid #eee;
+      display: flex; justify-content: flex-end; gap: 0.7rem;
+    }
+    .flabel { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #888; margin-bottom: 0.4rem; }
+
+    /* ── RICH TEXT EDITOR ───────────────────────────── */
+    .rte { border: 1.5px solid #ddd; border-radius: 8px; overflow: hidden; }
+    .rte:focus-within { border-color: #3498db; }
+    .rte-bar {
+      display: flex; align-items: center; gap: 0.15rem;
+      padding: 0.35rem 0.5rem; background: #f8f8f8; border-bottom: 1px solid #eee;
+    }
+    .rte-bar button {
+      background: none; border: 1px solid transparent; border-radius: 4px;
+      padding: 0.18rem 0.42rem; cursor: pointer; font-size: 0.8rem; color: #333;
+      font-weight: 600; transition: all 0.09s; line-height: 1.4;
+    }
+    .rte-bar button:hover { background: #e5e5e5; border-color: #ccc; }
+    .rte-sep { width: 1px; height: 16px; background: #ddd; margin: 0 0.15rem; flex-shrink: 0; }
+    .rte-html-toggle { margin-left: auto; font-size: 0.7rem !important; color: #999 !important; }
+    .rte-visual {
+      min-height: 90px; padding: 0.65rem 0.75rem;
+      outline: none; font-size: 0.88rem; line-height: 1.55;
+    }
+    .rte-visual pre {
+      background: #f4f4f4; padding: 0.45rem 0.6rem; border-radius: 4px;
+      font-size: 0.83rem; white-space: pre-wrap; margin: 0.2rem 0;
+    }
+    .rte-visual code { background: #f0f0f0; padding: 0.1rem 0.3rem; border-radius: 3px; font-size: 0.85em; }
+    .rte-source {
+      display: none; width: 100%; min-height: 90px;
+      padding: 0.65rem 0.75rem; font-family: monospace; font-size: 0.8rem;
+      border: none; outline: none; resize: vertical; background: #fafafa;
+    }
+    .rte.html-mode .rte-visual { display: none; }
+    .rte.html-mode .rte-source { display: block; }
+
+    /* ── MODAL TAGS ─────────────────────────────────── */
+    .tag-edit { display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; }
+    .mtag {
+      display: inline-flex; align-items: center; gap: 0.25rem;
+      padding: 0.2rem 0.55rem; background: #e8f4fd; color: #2980b9;
+      border-radius: 999px; font-size: 0.78rem;
+    }
+    .mtag button {
+      background: none; border: none; cursor: pointer;
+      color: #2980b9; font-size: 0.8rem; line-height: 1; opacity: 0.7;
+    }
+    .mtag button:hover { opacity: 1; }
+    .tag-adder { display: flex; align-items: center; gap: 0.3rem; position: relative; margin-top: 0.45rem; }
+    .tag-in {
+      border: 1.5px solid #ddd; border-radius: 6px;
+      padding: 0.25rem 0.55rem; font-size: 0.8rem; width: 200px; outline: none;
+    }
+    .tag-in:focus { border-color: #3498db; }
+    .tag-plus {
+      background: #3498db; color: white; border: none; border-radius: 50%;
+      width: 22px; height: 22px; font-size: 1rem; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .tag-plus:hover { background: #2980b9; }
+    .tag-ac {
+      display: none; position: absolute; top: 100%; left: 0; z-index: 20;
+      background: white; border: 1px solid #ddd; border-radius: 7px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.1); max-height: 180px; overflow-y: auto; min-width: 220px;
+    }
+    .tag-ac.open { display: block; }
+    .ac-item { padding: 0.38rem 0.75rem; font-size: 0.8rem; cursor: pointer; color: #333; }
+    .ac-item:hover { background: #f0f7ff; }
+
+    /* ── BUTTONS ─────────────────────────────────────── */
+    .btn {
+      padding: 0.42rem 1.1rem; border-radius: 7px; font-size: 0.86rem;
+      cursor: pointer; border: none; transition: all 0.11s;
+    }
+    .btn-ghost { background: none; border: 1.5px solid #ddd; color: #555; }
+    .btn-ghost:hover { background: #f4f4f4; }
+    .btn-save { background: #27ae60; color: white; }
+    .btn-save:hover { background: #2ecc71; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Stop+Think Editor</h1>
+  <span id="save-status">Ready</span>
+  <button class="hbtn green" onclick="saveFile()">Save</button>
+  <button class="hbtn deploy" onclick="deployAction()">Deploy ↑</button>
+</header>
+
+<div class="layout">
+
+  <!-- TAG FILTER -->
+  <div class="panel">
+    <div class="panel-title">Filter by Tags <span style="font-weight:400;color:#bbb">(AND logic — must match all selected)</span></div>
+    <div class="pill-wrap" id="tag-pills"></div>
+    <div class="filter-meta" id="filter-meta"></div>
+  </div>
+
+  <!-- QUESTION LIST -->
+  <div class="panel">
+    <div class="panel-row">
+      <div class="panel-title">Questions <span id="q-count-label" style="font-weight:400;color:#bbb"></span></div>
+      <button class="new-q-btn" onclick="openNewModal()">+ New Question</button>
+    </div>
+    <div class="q-list" id="q-list"></div>
+  </div>
+
+  <!-- URL GENERATOR -->
+  <div class="panel">
+    <div class="panel-row">
+      <div class="panel-title">Generated URL <span style="font-weight:400;color:#bbb">(drag to reorder · check to include)</span></div>
+      <span style="display:flex;gap:0.4rem;">
+        <button class="clear-btn" onclick="setAllChecked(true)">✓ All</button>
+        <button class="clear-btn" onclick="setAllChecked(false)">✕ None</button>
+      </span>
+    </div>
+    <div class="url-box" id="url-box" onclick="copyURL()" title="Click to copy">— no questions to show —</div>
+    <div class="url-hint" id="url-hint">Click URL to copy to clipboard</div>
+    <div class="url-controls">
+      <label>
+        <input type="checkbox" id="slides-cb">
+        <span>slides=true</span>
+      </label>
+      <button class="copy-btn" id="copy-btn" onclick="copyURL()">Copy URL</button>
+      <button class="copy-btn" style="background:#8e44ad;" onclick="copyAsIframe()">Copy as &lt;iframe&gt;</button>
+      <button class="copy-btn" style="background:#2980b9;" onclick="togglePreview()">Preview</button>
+    </div>
+  </div>
+
+  <!-- PREVIEW -->
+  <div class="panel" id="preview-panel" style="display:none;">
+    <div class="panel-row">
+      <div class="panel-title">Preview</div>
+      <button class="clear-btn" onclick="togglePreview()">✕ Close</button>
+    </div>
+    <iframe id="preview-frame" src="" style="width:100%;height:500px;border:1px solid #e0e0e0;border-radius:6px;" allowfullscreen></iframe>
+  </div>
+
+</div>
+
+<!-- EDIT MODAL -->
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="modal-title">Edit Question</h2>
+      <button class="x-btn" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+
+      <div>
+        <div class="flabel">Question</div>
+        <div class="rte" id="q-rte">
+          <div class="rte-bar">
+            <button onclick="rteCmd('q-rte','bold')"><b>B</b></button>
+            <button onclick="rteCmd('q-rte','italic')"><i>I</i></button>
+            <div class="rte-sep"></div>
+            <button onclick="rteInsert('q-rte','code')">code</button>
+            <button onclick="rteInsert('q-rte','pre')">pre</button>
+            <button onclick="rteInsert('q-rte','br')" title="Insert line break">↵ br</button>
+            <button class="rte-html-toggle" onclick="toggleHtml('q-rte')">HTML ⇄</button>
+          </div>
+          <div class="rte-visual" contenteditable="true"></div>
+          <textarea class="rte-source"></textarea>
+        </div>
+      </div>
+
+      <div>
+        <div class="flabel">Answer</div>
+        <div class="rte" id="a-rte">
+          <div class="rte-bar">
+            <button onclick="rteCmd('a-rte','bold')"><b>B</b></button>
+            <button onclick="rteCmd('a-rte','italic')"><i>I</i></button>
+            <div class="rte-sep"></div>
+            <button onclick="rteInsert('a-rte','code')">code</button>
+            <button onclick="rteInsert('a-rte','pre')">pre</button>
+            <button onclick="rteInsert('a-rte','br')" title="Insert line break">↵ br</button>
+            <button class="rte-html-toggle" onclick="toggleHtml('a-rte')">HTML ⇄</button>
+          </div>
+          <div class="rte-visual" contenteditable="true"></div>
+          <textarea class="rte-source"></textarea>
+        </div>
+      </div>
+
+      <div>
+        <div class="flabel">Tags</div>
+        <div class="tag-edit" id="modal-tags"></div>
+        <div class="tag-adder">
+          <input type="text" class="tag-in" id="tag-input" placeholder="Type to search or create tag…" autocomplete="off">
+          <button class="tag-plus" onclick="addTagFromInput()" title="Add tag">+</button>
+          <div class="tag-ac" id="tag-ac"></div>
+        </div>
+      </div>
+
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-save" onclick="saveEdit()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── STATE ────────────────────────────────────────────────────────────────────
+
+let questions = [];
+let selectedTags = new Set();
+let displayedQuestions = [];
+let excludedNums = new Set();   // question numbers unchecked from the URL
+let editingNumber = null; // number | 'new' | null
+let pendingNewNumber = null;
+
+const BASE = 'https://innoeduvation.org/danryan/production/teaching/stop_and_think/index.html';
+
+// ── INIT ─────────────────────────────────────────────────────────────────────
+
+(function init() {
+  if (window.stopThinkQuestions && window.stopThinkQuestions.length) {
+    questions = cloneQuestions(window.stopThinkQuestions);
+  }
+  refresh();
+  initDragDrop();
+})();
+
+function cloneQuestions(src) {
+  return src.map(q => ({ ...q, tags: q.tags ? [...q.tags] : [] }));
+}
+
+// ── TAG HELPERS ───────────────────────────────────────────────────────────────
+
+function getAllTags() {
+  const s = new Set();
+  questions.forEach(q => (q.tags || []).forEach(t => t && s.add(t)));
+  return [...s].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+}
+
+function getFiltered() {
+  if (selectedTags.size === 0) return [...questions];
+  return questions.filter(q =>
+    [...selectedTags].every(t => (q.tags || []).includes(t))
+  );
+}
+
+// ── RENDER ────────────────────────────────────────────────────────────────────
+
+function refresh() {
+  // Drop any selected tags that no longer exist in the data
+  const live = getAllTags();
+  for (const t of selectedTags) {
+    if (!live.includes(t)) selectedTags.delete(t);
+  }
+  renderPills();
+  displayedQuestions = getFiltered();
+  renderList();
+  updateURL();
+}
+
+function renderPills() {
+  const c = document.getElementById('tag-pills');
+  c.innerHTML = '';
+
+  if (selectedTags.size > 0) {
+    const b = document.createElement('button');
+    b.className = 'clear-btn';
+    b.textContent = '✕ Clear';
+    b.onclick = () => { selectedTags.clear(); refresh(); };
+    c.appendChild(b);
+  }
+
+  getAllTags().forEach(tag => {
+    const p = document.createElement('span');
+    p.className = 'pill' + (selectedTags.has(tag) ? ' active' : '');
+    p.textContent = tag;
+    p.onclick = () => {
+      selectedTags.has(tag) ? selectedTags.delete(tag) : selectedTags.add(tag);
+      refresh();
+    };
+    c.appendChild(p);
+  });
+
+  const meta = document.getElementById('filter-meta');
+  if (selectedTags.size === 0) {
+    meta.textContent = questions.length + ' questions total';
+  } else {
+    const count = getFiltered().length;
+    const ts = [...selectedTags].map(t => '"' + t + '"').join(' AND ');
+    meta.innerHTML = '<strong>' + count + '</strong> of ' + questions.length + ' match ' + ts;
+  }
+}
+
+function renderList() {
+  const list = document.getElementById('q-list');
+  list.innerHTML = '';
+  document.getElementById('q-count-label').textContent = '(' + displayedQuestions.length + ')';
+
+  if (displayedQuestions.length === 0) {
+    list.innerHTML = '<div class="empty-state">No questions match the selected tags.</div>';
+    return;
+  }
+
+  displayedQuestions.forEach((q, idx) => {
+    const item = document.createElement('div');
+    item.className = 'q-item';
+    item.draggable = true;
+    item.dataset.idx = idx;
+
+    const tmp = document.createElement('div');
+    tmp.innerHTML = q.question.replace(/<img[^>]*>/gi, '[image]');
+    const plain = (tmp.textContent || '').trim();
+
+    const tags = q.tags || [];
+    const vis = tags.slice(0, 3).map(t =>
+      '<span class="qtag">' + escHtml(t) + '</span>'
+    ).join('');
+    const extra = tags.length > 3
+      ? '<span class="qtag overflow">+' + (tags.length - 3) + '</span>'
+      : '';
+
+    // Checkbox — built as DOM element so pointer-events isn't suppressed by the child rule
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.className = 'q-include-cb';
+    cb.checked = !excludedNums.has(q.number);
+    cb.title = 'Include in generated URL';
+    cb.addEventListener('change', e => {
+      e.stopPropagation();
+      if (cb.checked) excludedNums.delete(q.number);
+      else excludedNums.add(q.number);
+      updateURL();
+    });
+
+    item.innerHTML =
+      '<span class="drag-handle">⠿</span>' +
+      '<span class="q-num">#' + q.number + '</span>' +
+      '<span class="q-text">' + escHtml(plain) + '</span>' +
+      '<div class="q-taglist">' + vis + extra + '</div>' +
+      '<button class="edit-btn">Edit</button>';
+
+    item.insertBefore(cb, item.firstChild);
+
+    item.querySelector('.edit-btn').addEventListener('click', e => {
+      e.stopPropagation();
+      openModal(q.number);
+    });
+
+    list.appendChild(item);
+  });
+}
+
+// ── DRAG AND DROP (event delegation on list container) ───────────────────────
+// Using delegation avoids child elements swallowing dragover/drop events before
+// they reach the .q-item, which was preventing drops from registering.
+
+let dragIdx = null;
+
+function initDragDrop() {
+  const list = document.getElementById('q-list');
+
+  list.addEventListener('dragstart', e => {
+    const item = e.target.closest('.q-item');
+    if (!item) return;
+    dragIdx = parseInt(item.dataset.idx);
+    item.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+  });
+
+  list.addEventListener('dragover', e => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const item = e.target.closest('.q-item');
+    document.querySelectorAll('.q-item').forEach(i => i.classList.remove('drag-over'));
+    if (item) item.classList.add('drag-over');
+  });
+
+  list.addEventListener('dragleave', e => {
+    if (!list.contains(e.relatedTarget)) {
+      document.querySelectorAll('.q-item').forEach(i => i.classList.remove('drag-over'));
+    }
+  });
+
+  list.addEventListener('drop', e => {
+    e.preventDefault();
+    const item = e.target.closest('.q-item');
+    if (!item) return;
+    const dest = parseInt(item.dataset.idx);
+    if (dragIdx === null || isNaN(dest) || dragIdx === dest) return;
+    const [moved] = displayedQuestions.splice(dragIdx, 1);
+    displayedQuestions.splice(dest, 0, moved);
+    dragIdx = null;
+    document.querySelectorAll('.q-item').forEach(i => i.classList.remove('drag-over', 'dragging'));
+    renderList();
+    updateURL();
+  });
+
+  list.addEventListener('dragend', () => {
+    document.querySelectorAll('.q-item').forEach(i => i.classList.remove('dragging', 'drag-over'));
+    dragIdx = null;
+  });
+}
+
+// ── URL ───────────────────────────────────────────────────────────────────────
+
+function updateURL() {
+  const box = document.getElementById('url-box');
+  const included = displayedQuestions.filter(q => !excludedNums.has(q.number));
+  if (included.length === 0) {
+    box.textContent = '— no questions to show —';
+    return;
+  }
+  const nums = included.map(q => q.number).join(',');
+  const slides = document.getElementById('slides-cb').checked;
+  box.textContent = BASE + '?q=' + nums + (slides ? '&slides=true' : '');
+}
+
+document.getElementById('slides-cb').addEventListener('change', updateURL);
+
+function setAllChecked(checked) {
+  displayedQuestions.forEach(q => {
+    if (checked) excludedNums.delete(q.number);
+    else excludedNums.add(q.number);
+  });
+  // Sync checkbox UI without full re-render
+  document.querySelectorAll('.q-include-cb').forEach(cb => { cb.checked = checked; });
+  updateURL();
+}
+
+function copyURL() {
+  const text = document.getElementById('url-box').textContent;
+  if (!text || text.startsWith('—')) return;
+  const btn = document.getElementById('copy-btn');
+  const hint = document.getElementById('url-hint');
+
+  function flash() {
+    btn.textContent = 'Copied!';
+    hint.textContent = '✓ Copied to clipboard';
+    hint.style.color = '#27ae60';
+    setTimeout(() => {
+      btn.textContent = 'Copy URL';
+      hint.textContent = 'Click URL to copy to clipboard';
+      hint.style.color = '';
+    }, 1800);
+  }
+
+  navigator.clipboard.writeText(text).then(flash).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;left:-9999px;top:0';
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    flash();
+  });
+}
+
+function copyAsIframe() {
+  const url = document.getElementById('url-box').textContent;
+  if (!url || url.startsWith('—')) return;
+  const tag = `<iframe src="${url}" width="100%" height="400"></iframe>`;
+  const hint = document.getElementById('url-hint');
+  navigator.clipboard.writeText(tag).then(() => {
+    hint.textContent = '✓ iframe tag copied';
+    hint.style.color = '#8e44ad';
+    setTimeout(() => { hint.textContent = 'Click URL to copy to clipboard'; hint.style.color = ''; }, 1800);
+  });
+}
+
+function togglePreview() {
+  const panel = document.getElementById('preview-panel');
+  const frame = document.getElementById('preview-frame');
+  const visible = panel.style.display !== 'none';
+  if (visible) {
+    panel.style.display = 'none';
+    frame.src = '';
+  } else {
+    const url = document.getElementById('url-box').textContent;
+    if (!url || url.startsWith('—')) return;
+    frame.src = url;
+    panel.style.display = 'block';
+    panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
+// ── MODAL ─────────────────────────────────────────────────────────────────────
+
+function openModal(num) {
+  const q = questions.find(x => x.number === num);
+  if (!q) return;
+  editingNumber = num;
+  pendingNewNumber = null;
+  document.getElementById('modal-title').textContent = 'Edit Question #' + num;
+  loadRte('q-rte', q.question);
+  loadRte('a-rte', q.answer);
+  renderModalTags(q.tags || []);
+  document.getElementById('tag-input').value = '';
+  document.getElementById('tag-ac').classList.remove('open');
+  document.getElementById('overlay').classList.add('open');
+}
+
+function openNewModal() {
+  editingNumber = 'new';
+  pendingNewNumber = Math.max(...questions.map(q => q.number), 0) + 1;
+  document.getElementById('modal-title').textContent = 'New Question #' + pendingNewNumber;
+  loadRte('q-rte', '');
+  loadRte('a-rte', '');
+  renderModalTags([]);
+  document.getElementById('tag-input').value = '';
+  document.getElementById('tag-ac').classList.remove('open');
+  document.getElementById('overlay').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('overlay').classList.remove('open');
+  editingNumber = null;
+  pendingNewNumber = null;
+}
+
+function loadRte(id, html) {
+  const w = document.getElementById(id);
+  w.querySelector('.rte-visual').innerHTML = html;
+  w.querySelector('.rte-source').value = html;
+  w.classList.remove('html-mode');
+}
+
+function getFieldContent(id) {
+  const w = document.getElementById(id);
+  return w.classList.contains('html-mode')
+    ? w.querySelector('.rte-source').value
+    : w.querySelector('.rte-visual').innerHTML;
+}
+
+function saveEdit() {
+  const newQ = getFieldContent('q-rte');
+  const newA = getFieldContent('a-rte');
+  const newTags = getModalTags();
+
+  if (editingNumber === 'new') {
+    questions.push({ number: pendingNewNumber, question: newQ, answer: newA, tags: newTags });
+  } else {
+    const idx = questions.findIndex(q => q.number === editingNumber);
+    if (idx === -1) return;
+    questions[idx] = { ...questions[idx], question: newQ, answer: newA, tags: newTags };
+  }
+
+  closeModal();
+  markUnsaved();
+  refresh();
+}
+
+// ── MODAL TAGS ────────────────────────────────────────────────────────────────
+
+function renderModalTags(tags) {
+  const c = document.getElementById('modal-tags');
+  c.innerHTML = '';
+  tags.forEach(tag => {
+    if (!tag) return;
+    const s = document.createElement('span');
+    s.className = 'mtag';
+    s.dataset.tag = tag;
+    s.innerHTML = escHtml(tag) + ' <button onclick="removeTag(this)">×</button>';
+    c.appendChild(s);
+  });
+}
+
+function removeTag(btn) { btn.parentElement.remove(); }
+
+function getModalTags() {
+  return [...document.querySelectorAll('#modal-tags .mtag')].map(el => el.dataset.tag);
+}
+
+function addTagFromInput() {
+  const inp = document.getElementById('tag-input');
+  const tag = inp.value.trim();
+  if (!tag) return;
+  if (getModalTags().includes(tag)) { inp.value = ''; return; }
+  const s = document.createElement('span');
+  s.className = 'mtag';
+  s.dataset.tag = tag;
+  s.innerHTML = escHtml(tag) + ' <button onclick="removeTag(this)">×</button>';
+  document.getElementById('modal-tags').appendChild(s);
+  inp.value = '';
+  document.getElementById('tag-ac').classList.remove('open');
+}
+
+// ── TAG AUTOCOMPLETE ──────────────────────────────────────────────────────────
+
+const tagInput = document.getElementById('tag-input');
+const tagAC = document.getElementById('tag-ac');
+
+tagInput.addEventListener('input', () => {
+  const v = tagInput.value.trim().toLowerCase();
+  tagAC.innerHTML = '';
+  if (!v) { tagAC.classList.remove('open'); return; }
+  const current = getModalTags();
+  const hits = getAllTags().filter(t => t.toLowerCase().includes(v) && !current.includes(t));
+  if (!hits.length) { tagAC.classList.remove('open'); return; }
+  hits.slice(0, 12).forEach(t => {
+    const d = document.createElement('div');
+    d.className = 'ac-item';
+    d.textContent = t;
+    d.addEventListener('mousedown', e => { e.preventDefault(); tagInput.value = t; addTagFromInput(); });
+    tagAC.appendChild(d);
+  });
+  tagAC.classList.add('open');
+});
+
+tagInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); addTagFromInput(); }
+  if (e.key === 'Escape') tagAC.classList.remove('open');
+});
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.tag-adder')) tagAC.classList.remove('open');
+});
+
+// ── RICH TEXT EDITOR ──────────────────────────────────────────────────────────
+
+function rteCmd(id, cmd) {
+  const el = document.querySelector('#' + id + ' .rte-visual');
+  el.focus();
+  document.execCommand(cmd, false, null);
+}
+
+function rteInsert(id, type) {
+  const el = document.querySelector('#' + id + ' .rte-visual');
+  el.focus();
+  const sel = window.getSelection();
+  if (!sel.rangeCount) return;
+  const range = sel.getRangeAt(0);
+
+  if (type === 'br') {
+    const br = document.createElement('br');
+    range.deleteContents();
+    range.insertNode(br);
+    range.setStartAfter(br);
+    range.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  } else {
+    const node = document.createElement(type);
+    const selectedText = range.toString();
+    node.textContent = selectedText || (type === 'pre' ? 'code here' : 'code');
+    range.deleteContents();
+    range.insertNode(node);
+    range.selectNodeContents(node);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+}
+
+function toggleHtml(id) {
+  const w = document.getElementById(id);
+  const visual = w.querySelector('.rte-visual');
+  const source = w.querySelector('.rte-source');
+  if (w.classList.contains('html-mode')) {
+    visual.innerHTML = source.value;
+    w.classList.remove('html-mode');
+  } else {
+    source.value = visual.innerHTML;
+    w.classList.add('html-mode');
+    source.focus();
+  }
+}
+
+// ── FILE SYSTEM ACCESS ────────────────────────────────────────────────────────
+
+function setStatus(msg, color, duration) {
+  const el = document.getElementById('save-status');
+  el.textContent = msg;
+  el.style.color = color || '';
+  if (duration) setTimeout(() => { el.textContent = 'Ready'; el.style.color = ''; }, duration);
+}
+
+function markUnsaved() {
+  setStatus('● Unsaved changes');
+}
+
+async function saveFile() {
+  setStatus('Saving…');
+  try {
+    const res = await fetch('/api/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: serialize(questions)
+    });
+    if (!res.ok) throw new Error(await res.text());
+    setStatus('Saved ✓', '#27ae60', 2500);
+  } catch (err) {
+    setStatus('Save failed: ' + err.message, '#e74c3c');
+    alert('Save failed:\n' + err.message);
+  }
+}
+
+async function deployAction() {
+  setStatus('Deploying…', '#9b59b6');
+  try {
+    const res = await fetch('/api/deploy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: serialize(questions)
+    });
+    const json = await res.json();
+    if (json.ok) {
+      setStatus('Deployed ✓', '#27ae60', 4000);
+    } else {
+      setStatus('Deploy failed', '#e74c3c');
+      alert('Deploy failed:\n' + (json.error || 'unknown error'));
+    }
+  } catch (err) {
+    setStatus('Deploy failed', '#e74c3c');
+    alert('Deploy failed:\n' + err.message + '\n\nIs server.py running? Use start.command to launch the editor.');
+  }
+}
+
+function serialize(data) {
+  const rows = data.map(q =>
+    '   ' + JSON.stringify({ number: q.number, question: q.question, answer: q.answer, tags: q.tags || [] })
+  );
+  return 'window.stopThinkQuestions = [\n' + rows.join(',\n') + '\n];\n';
+}
+
+// ── KEYBOARD SHORTCUTS ────────────────────────────────────────────────────────
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeModal();
+  if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+    e.preventDefault();
+    if (document.getElementById('overlay').classList.contains('open')) {
+      saveEdit();
+    } else {
+      saveFile();
+    }
+  }
+});
+
+document.getElementById('overlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('overlay')) closeModal();
+});
+
+// ── UTILS ─────────────────────────────────────────────────────────────────────
+
+function escHtml(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>
